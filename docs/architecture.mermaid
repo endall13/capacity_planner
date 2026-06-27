@@ -1,0 +1,78 @@
+graph TB
+    subgraph Browser["🖥  Client — Browser"]
+        UI["React / Next.js Frontend\n─────────────────────\nProject Dashboard\nVelocity Health Report\nTeam & Sprint Management\nPTO & Capacity Entry\nAdmin Settings"]
+    end
+
+    subgraph NextServer["⚙️  Application Server — Next.js"]
+        API["API Routes\n/api/projects\n/api/teams\n/api/engineers\n/api/sprints\n/api/capacity\n/api/sync"]
+        AUTH["NextAuth.js\n─────────────\nAzure AD SSO\nLocal Login (dev/fallback)"]
+    end
+
+    subgraph Services["🔧  Service Layer"]
+        FORECAST["Forecast Engine\n─────────────────\nComputes projected\ncompletion date\nand burndown"]
+        CAPACITY["Capacity Calculator\n─────────────────\nDaily rate · available days\n− injectionPoints\n= effective velocity"]
+        SPRINT["Sprint Generator\n─────────────────\nAnchor date → schedule\nAuto-names: YYYY-QQ-N\nHoliday injection\nBoundary rule"]
+        PROVIDER["Work Item Provider\n─────────────────\n« interface »\ngetProjects()\ngetEpics()\ngetFeatures()\ngetWorkItems()\nsyncAll()"]
+    end
+
+    subgraph Implementations["🔌  Provider Implementations"]
+        ADO_IMPL["ADO Provider\n─────────────────\nADO REST API v7\nPAT auth\nEpic→Feature→WorkItem\nhierarchy mapping"]
+        JIRA_IMPL["Jira Provider\n─────────────────\n« Phase 3 »\nOAuth 2.0\nEpic→Story mapping"]
+    end
+
+    subgraph Background["⏱  Background Jobs"]
+        WORKER["Sync Worker\n─────────────────\nScheduled: every 15 min\nManual: EM / Admin trigger\nSprint boundary detection\nSnapshot lifecycle\nForecast recomputation"]
+    end
+
+    subgraph Data["🗄  Data Layer — MongoDB"]
+        MONGO[("MongoDB\n─────────────────\norganizations\nusers · engineers\nsprints · sprintCapacityEntries\nprojects · projectSprintSnapshots\nepics · features · workItems\nsyncLogs")]
+    end
+
+    subgraph External["☁️  External Systems"]
+        ADO_API["Azure DevOps\nREST API v7"]
+        AAD["Azure Active Directory\nSSO / OAuth 2.0"]
+    end
+
+    %% Client ↔ Server
+    UI -->|"HTTPS / JSON"| API
+    UI -->|"Auth flow"| AUTH
+
+    %% Auth
+    AUTH -->|"Token validation"| AAD
+    AUTH -->|"Session store / user lookup"| MONGO
+
+    %% API → Services
+    API --> FORECAST
+    API --> CAPACITY
+    API --> SPRINT
+    API -->|"Trigger manual sync"| WORKER
+
+    %% Services → Data
+    FORECAST --> MONGO
+    CAPACITY --> MONGO
+    SPRINT --> MONGO
+
+    %% Provider abstraction
+    WORKER -->|"calls interface"| PROVIDER
+    PROVIDER --> ADO_IMPL
+    PROVIDER -.->|"Phase 3"| JIRA_IMPL
+
+    %% Provider → External
+    ADO_IMPL -->|"PAT auth"| ADO_API
+
+    %% Sync → Data & Forecast
+    WORKER -->|"upsert epics/features/workItems\nopen/close snapshots\nwrite syncLogs"| MONGO
+    WORKER -->|"trigger recompute"| FORECAST
+
+    %% Styling
+    classDef external fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    classDef service fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef data fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    classDef background fill:#fce7f3,stroke:#db2777,color:#831843
+    classDef future fill:#f3f4f6,stroke:#9ca3af,color:#6b7280,stroke-dasharray:5 5
+
+    class ADO_API,AAD external
+    class FORECAST,CAPACITY,SPRINT,PROVIDER,ADO_IMPL service
+    class MONGO data
+    class WORKER background
+    class JIRA_IMPL future
